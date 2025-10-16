@@ -1,5 +1,4 @@
-import React, { useState, useRef } from 'react';
-import Webcam from 'react-webcam';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Download, RotateCcw, Printer, Play } from 'lucide-react';
 
 export default function PhotoboxTwinsFast() {
@@ -12,6 +11,28 @@ export default function PhotoboxTwinsFast() {
 
   const webcamRef = useRef(null);
   const audioRef = useRef(null);
+  const videoRef = useRef(null);
+
+  const [webcamReady, setWebcamReady] = useState(false);
+useEffect(() => {
+  if (step === 'capture' || step === 'retake') {
+    const initCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: 640, height: 480 },
+          audio: false
+        });
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setWebcamReady(true);
+      } catch (err) {
+        alert('Tidak bisa akses kamera 😭');
+      }
+    }
+    initCamera();
+  }
+}, [step, currentPose]);
+
+
 
   const monkeyPoses = [
     '/monyet1.jpeg',
@@ -28,79 +49,164 @@ export default function PhotoboxTwinsFast() {
     setIsMusicPlaying(!isMusicPlaying);
   };
 
-  const startCamera = () => setStep('capture');
+  const startCamera = async () => {
+  setStep('capture');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'user', width: 640, height: 480 },
+      audio: false 
+    });
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play(); // pastikan autoplay jalan
+    }
+    setWebcamReady(true); // sekarang bisa render video
+  } catch (err) {
+    alert('Tidak bisa akses kamera ');
+  }
+};
+
 
   // Ambil foto
   const capturePhoto = () => {
-    if (!webcamRef.current) {
-      alert('Kamera belum siap 😅');
+    if (!videoRef.current) {
+      alert('Kamera belum siap');
       return;
     }
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) {
-      alert('Gagal mengambil foto 😭');
-      return;
-    }
-
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    
+    // Mirror horizontally
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    
+    const imageSrc = canvas.toDataURL('image/png');
+    
     const updated = [...photos];
     updated[currentPose - 1] = imageSrc;
     setPhotos(updated);
     setStep('preview');
   };
 
-    // 📸 Capture khusus untuk retake dari halaman final
+  // Capture khusus untuk retake dari halaman final
   const captureRetake = () => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) {
-      alert('Gagal ambil ulang 😭');
+    if (!videoRef.current) {
+      alert('Gagal ambil ulang');
       return;
     }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    
+    const imageSrc = canvas.toDataURL('image/png');
+    
     const updated = [...photos];
     updated[retakeIndex] = imageSrc;
     setPhotos(updated);
     setRetakeIndex(null);
-    setStep('final'); // langsung balik ke halaman final
+    setStep('final');
   };
 
   const nextPose = () => {
-    if (currentPose < 4) setCurrentPose(currentPose + 1), setStep('capture');
-    else setStep('final');
+    if (currentPose < 4) {
+      setCurrentPose(currentPose + 1);
+      setStep('capture');
+    } else {
+      setStep('final');
+    }
   };
 
-   const retakePhoto = (poseIndex = null) => {
+  const retakePhoto = (poseIndex = null) => {
     if (poseIndex !== null) {
-      // kalau dari final page
       setRetakeIndex(poseIndex);
-      setStep('retake'); // mode khusus retake satu foto
+      setStep('retake');
     } else {
-      // kalau dari preview
       setStep('capture');
     }
   };
 
-
-  // Download hasil
-  // Download hasil (versi proporsional 4R)
-const downloadResult = async () => {
+const downloadInstagram = async () => {
   const finalCanvas = document.createElement('canvas');
   const ctx = finalCanvas.getContext('2d');
-  finalCanvas.width = 1200; // ukuran 4R
-  finalCanvas.height = 1800;
 
-  // Latar putih lembut
+  // Instagram Story: 1080x1920 px
+  finalCanvas.width = 1080;
+  finalCanvas.height = 1920;
+
+  const halfWidth = finalCanvas.width / 2; // kiri user, kanan monkey
+  const slotHeight = finalCanvas.height / 4; // 4 foto vertikal
+
+  for (let i = 0; i < 4; i++) {
+    if (!photos[i]) continue;
+
+    const userImg = new Image();
+    const monkeyImg = new Image();
+    userImg.src = photos[i];
+    monkeyImg.src = monkeyPoses[i];
+
+    await Promise.all([
+      new Promise((res) => (userImg.onload = res)),
+      new Promise((res) => (monkeyImg.onload = res)),
+    ]);
+
+    const y = i * slotHeight;
+
+    // Draw cover function: paksa gambar penuh slot
+    const drawCover = (img, x, y, w, h) => {
+      const scale = Math.max(w / img.width, h / img.height); // paksa cover
+      const sw = w / scale;
+      const sh = h / scale;
+      const sx = (img.width - sw) / 2;
+      const sy = (img.height - sh) / 2;
+      ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+    };
+
+    // kiri user
+    drawCover(userImg, 0, y, halfWidth, slotHeight);
+    // kanan monkey
+    drawCover(monkeyImg, halfWidth, y, halfWidth, slotHeight);
+  }
+
+  finalCanvas.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'twins-instagram-story.png';
+    a.click();
+  });
+};
+
+
+
+
+
+// Download untuk Photobox (dengan separator, format 4R)
+const downloadPhotobox = async () => {
+  const finalCanvas = document.createElement('canvas');
+  const ctx = finalCanvas.getContext('2d');
+
+  const photoW = 540;
+  const photoH = 405;
+  const gapX = 50;
+  const gapY = 50;
+  const marginTop = 80;
+  const bottomMargin = 90;
+
+  finalCanvas.width = 2 * photoW + 3 * gapX;
+  finalCanvas.height = photos.length * photoH + (photos.length + 1) * gapY + bottomMargin;
+
   ctx.fillStyle = '#FAFAF8';
   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-
-  // Ukuran foto dalam frame (lebih penuh)
-  const frameWidth = 520;
-  const frameHeight = 390;
-  const gapY = 20; // jarak antar baris
-  const xGap = 40; // jarak antar kolom
-
-  // Margin atas & samping
-  const totalHeight = frameHeight * 4 + gapY * 3;
-  const marginTop = (finalCanvas.height - totalHeight) / 2 - 20;
-  const marginSide = (finalCanvas.width - (frameWidth * 2 + xGap)) / 2;
 
   for (let i = 0; i < photos.length; i++) {
     if (!photos[i]) continue;
@@ -115,46 +221,152 @@ const downloadResult = async () => {
       new Promise((res) => (monkeyImg.onload = res)),
     ]);
 
-    const y = marginTop + i * (frameHeight + gapY);
+    const y = gapY + i * (photoH + gapY);
+    const x1 = gapX;
+    const x2 = x1 + photoW + gapX;
 
-    // Gambar kiri (foto user)
-    ctx.drawImage(userImg, marginSide, y, frameWidth, frameHeight);
+    // USER
+    const userScale = Math.max(photoW / userImg.width, photoH / userImg.height);
+    const userScaledW = userImg.width * userScale;
+    const userScaledH = userImg.height * userScale;
+    const userOffsetX = (photoW - userScaledW) / 2;
+    const userOffsetY = (photoH - userScaledH) / 2;
 
-    // Gambar kanan (foto monyet)
-    ctx.drawImage(monkeyImg, marginSide + frameWidth + xGap, y, frameWidth, frameHeight);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x1, y, photoW, photoH);
+    ctx.clip();
+    ctx.drawImage(userImg, x1 + userOffsetX, y + userOffsetY, userScaledW, userScaledH);
+    ctx.restore();
+
+    // MONKEY dengan crop bawah 10%
+    const monkeyScale = Math.max(photoW / monkeyImg.width, photoH / monkeyImg.height);
+    const monkeyScaledW = monkeyImg.width * monkeyScale;
+    const monkeyScaledH = monkeyImg.height * monkeyScale;
+    const monkeyOffsetX = (photoW - monkeyScaledW) / 2;
+    const monkeyOffsetY = (photoH - monkeyScaledH * 0.9) / 2; // 0.9 crop 10% bawah
+    const monkeyCropH = monkeyImg.height * 0.9;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x2, y, photoW, photoH);
+    ctx.clip();
+    ctx.drawImage(monkeyImg, 0, 0, monkeyImg.width, monkeyCropH, x2 + monkeyOffsetX, y + monkeyOffsetY, monkeyScaledW, monkeyScaledH * 0.9);
+    ctx.restore();
   }
 
-  // Teks bawah elegan
-  ctx.fillStyle = '#000';
-  ctx.font = 'italic 36px "Playfair Display", serif';
+  // Teks bawah
+  ctx.fillStyle = '#333';
+  ctx.font = 'italic 42px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Made with ❤️ by Dinda', finalCanvas.width / 2, finalCanvas.height - 40);
+  ctx.fillText('Made with ❤️ by Dinda', finalCanvas.width / 2, finalCanvas.height - 60);
 
-  // Download hasil
+  // Download
   finalCanvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'photobox-twins-dinda.png';
+    a.download = 'twins-photobox-4r.png';
     a.click();
   });
 };
 
 
-  const printResult = () => window.print();
+
+  // Print langsung format 4R
+  const printResult = async () => {
+    const printCanvas = document.createElement('canvas');
+    const ctx = printCanvas.getContext('2d');
+    
+    printCanvas.width = 1200;
+    printCanvas.height = 1800;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, printCanvas.width, printCanvas.height);
+
+   const photoW = 540;
+    const photoH = 405;
+    const gapX = 30;
+    const gapY = 30;
+    const marginTop = 50;
+    const bottomMargin = 120; // untuk teks
+
+    for (let i = 0; i < photos.length; i++) {
+      if (!photos[i]) continue;
+
+      const userImg = new Image();
+      const monkeyImg = new Image();
+      userImg.src = photos[i];
+      monkeyImg.src = monkeyPoses[i];
+
+      await Promise.all([
+        new Promise((res) => (userImg.onload = res)),
+        new Promise((res) => (monkeyImg.onload = res)),
+      ]);
+
+      const y = marginTop + i * (photoH + gapY);
+      const x1 = 30;
+      const x2 = x1 + photoW + gapX;
+
+      const userScale = Math.max(photoW / userImg.width, photoH / userImg.height);
+      const userScaledW = userImg.width * userScale;
+      const userScaledH = userImg.height * userScale;
+      const userOffsetX = (photoW - userScaledW) / 2;
+      const userOffsetY = (photoH - userScaledH) / 2;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x1, y, photoW, photoH);
+      ctx.clip();
+      ctx.drawImage(userImg, x1 + userOffsetX, y + userOffsetY, userScaledW, userScaledH);
+      ctx.restore();
+
+      const monkeyScale = Math.max(photoW / monkeyImg.width, photoH / monkeyImg.height);
+      const monkeyScaledW = monkeyImg.width * monkeyScale;
+      const monkeyScaledH = monkeyImg.height * monkeyScale;
+      const monkeyOffsetX = (photoW - monkeyScaledW) / 2;
+      const monkeyOffsetY = (photoH - monkeyScaledH) / 2;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x2, y, photoW, photoH);
+      ctx.clip();
+      ctx.drawImage(monkeyImg, x2 + monkeyOffsetX, y + monkeyOffsetY, monkeyScaledW, monkeyScaledH);
+      ctx.restore();
+    }
+
+    const dataUrl = printCanvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print Photobox</title>
+          <style>
+            @page { size: 4in 6in; margin: 0; }
+            body { margin: 0; padding: 0; }
+            img { width: 100%; height: 100%; display: block; }
+          </style>
+        </head>
+        <body>
+          <img src="${dataUrl}" />
+          <script>
+            window.onload = () => {
+              window.print();
+              window.onafterprint = () => window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const restart = () => {
     setPhotos([null, null, null, null]);
     setCurrentPose(1);
     setStep('start');
   };
 
-  const videoConstraints = {
-    width: 640,
-    height: 480,
-    facingMode: 'user',
-  };
-
-  // 🎨 Fungsi style filter
   const getFilterStyle = (filterName) => {
     switch (filterName) {
       case 'Bantul':
@@ -176,7 +388,6 @@ const downloadResult = async () => {
         <source src="/You Da One.mp3" type="audio/mpeg" />
       </audio>
 
-
       <div className="max-w-4xl text-center mb-6">
         <h1 className="text-5xl font-bold text-green-700 mb-2 drop-shadow-sm">
           Photobox Twins
@@ -193,7 +404,6 @@ const downloadResult = async () => {
         </button>
       </div>
 
-      {/* Start screen */}
       {step === 'start' && (
         <div className="max-w-2xl bg-white rounded-3xl shadow-xl p-8 text-center">
           <img
@@ -217,7 +427,6 @@ const downloadResult = async () => {
         </div>
       )}
 
-      {/* Capture */}
       {step === 'capture' && (
         <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-6">
           <div className="text-center mb-4">
@@ -226,7 +435,6 @@ const downloadResult = async () => {
             </span>
           </div>
 
-          {/* Filter Buttons */}
           <div className="flex justify-center gap-3 mb-6">
             {['none', 'Bantul', 'Gunkid', 'Jakarta', 'Sleman'].map((f) => (
               <button
@@ -242,17 +450,18 @@ const downloadResult = async () => {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Webcam dengan filter */}
             <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
-              <Webcam
-                ref={webcamRef}
-                mirrored
-                audio={false}
-                screenshotFormat="image/png"
-                videoConstraints={videoConstraints}
-                className="rounded-2xl w-full h-full object-cover"
-                style={{ filter: getFilterStyle(filter) }}
-              />
+              {webcamReady && (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="rounded-2xl w-full h-full object-cover"
+                  style={{ filter: getFilterStyle(filter), transform: 'scaleX(-1)' }}
+                />
+              )}
+              {!webcamReady && <p className="text-white font-bold">Kamera sedang menyiapkan...</p>}
+
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
                 <button
                   onClick={capturePhoto}
@@ -263,62 +472,53 @@ const downloadResult = async () => {
               </div>
             </div>
 
-            {/* Pose monyet */}
             <div className="bg-gradient-to-br from-green-200 to-green-100 rounded-2xl flex items-center justify-center aspect-[4/3] overflow-hidden">
               <img
                 src={monkeyPoses[currentPose - 1]}
                 alt="Monkey pose"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             </div>
           </div>
         </div>
       )}
 
-       {/* Retake Mode */}
       {step === 'retake' && (
-  <div className="max-w-4xl bg-white rounded-3xl shadow-2xl p-6 text-center">
-    <h2 className="text-3xl font-bold text-green-700 mb-6">
-      Ulangi Pose {retakeIndex + 1}
-    </h2>
+        <div className="max-w-4xl bg-white rounded-3xl shadow-2xl p-6 text-center">
+          <h2 className="text-3xl font-bold text-green-700 mb-6">
+            Ulangi Pose {retakeIndex + 1}
+          </h2>
 
-    <div className="grid grid-cols-2 gap-4 items-center justify-center">
-      {/* Webcam (kiri) */}
-      <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
-        <Webcam
-          ref={webcamRef}
-          mirrored
-          audio={false}
-          screenshotFormat="image/png"
-          videoConstraints={videoConstraints}
-          className="rounded-2xl w-full h-full object-cover"
-          style={{ filter: getFilterStyle(filter) }}
-        />
-      </div>
+          <div className="grid grid-cols-2 gap-4 items-center justify-center">
+            <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="rounded-2xl w-full h-full object-cover"
+                style={{ filter: getFilterStyle(filter), transform: 'scaleX(-1)' }}
+              />
+            </div>
 
-      {/* Foto monyet (kanan) */}
-      <div className="relative bg-gray-200 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
-        <img
-          src={monkeyPoses[retakeIndex]}
-          alt="Monkey Pose"
-          className="w-full h-full object-cover rounded-2xl"
-        />
-      </div>
-    </div>
+            <div className="relative bg-gray-200 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
+              <img
+                src={monkeyPoses[retakeIndex]}
+                alt="Monkey Pose"
+                className="w-full h-full object-cover rounded-2xl"
+              />
+            </div>
+          </div>
 
-    {/* Tombol capture */}
-    <button
-      onClick={captureRetake}
-      className="mt-6 bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full flex items-center gap-2 mx-auto shadow-lg transition"
-    >
-      <Camera size={28} />
-      Ambil Ulang Foto
-    </button>
-  </div>
-)}
+          <button
+            onClick={captureRetake}
+            className="mt-6 bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full flex items-center gap-2 mx-auto shadow-lg transition"
+          >
+            <Camera size={28} />
+            Ambil Ulang Foto
+          </button>
+        </div>
+      )}
 
-
-      {/* Preview */}
       {step === 'preview' && (
         <div className="max-w-4xl bg-white rounded-3xl shadow-2xl p-8">
           <h2 className="text-3xl font-bold text-green-700 text-center mb-6">
@@ -359,13 +559,12 @@ const downloadResult = async () => {
         </div>
       )}
 
-      {/* Final */}
       {step === 'final' && (
         <div className="max-w-4xl bg-white rounded-3xl shadow-2xl p-8">
           <h2 className="text-4xl font-bold text-center text-green-700 mb-6">
             Twins Complete!
           </h2>
-          <div className="grid grid-cols-1 gap-4 mb-8" id="photobox-result">
+          <div className="grid grid-cols-1 gap-4 mb-8">
             {photos.map((photo, index) => (
               <div
                 key={index}
@@ -399,12 +598,20 @@ const downloadResult = async () => {
 
           <div className="flex flex-wrap gap-4 justify-center">
             <button
-              onClick={downloadResult}
-              className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2"
+              onClick={downloadInstagram}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2"
             >
               <Download size={20} />
-              Download
+              Instagram
             </button>
+            <button
+                onClick={downloadPhotobox}
+                className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2"
+              >
+                <Download size={20} />
+                Photobox 4R
+              </button>
+
             <button
               onClick={printResult}
               className="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2"
@@ -423,24 +630,13 @@ const downloadResult = async () => {
         </div>
       )}
 
-      <div className="text-center mt-8 text-gray-600">
+      <div className="text-center mt-8 text-gray-800">
         <p className="font-medium">Made with ❤️ by Dinda</p>
       </div>
 
       <style jsx>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          #photobox-result,
-          #photobox-result * {
-            visibility: visible;
-          }
-          #photobox-result {
-            position: absolute;
-            left: 0;
-            top: 0;
-          }
+          @page { size: 4in 6in; margin: 0; }
         }
       `}</style>
     </div>
