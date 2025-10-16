@@ -68,54 +68,61 @@ useEffect(() => {
 
 
   // Ambil foto
-  const capturePhoto = () => {
-    if (!videoRef.current) {
-      alert('Kamera belum siap');
-      return;
-    }
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext('2d');
-    
-    // Mirror horizontally
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
-    const imageSrc = canvas.toDataURL('image/png');
-    
-    const updated = [...photos];
-    updated[currentPose - 1] = imageSrc;
-    setPhotos(updated);
-    setStep('preview');
-  };
+const capturePhoto = () => {
+  const video = videoRef.current;
+  if (!video || video.videoWidth === 0) {
+    alert("Kamera belum siap 😭");
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  // Gunakan ukuran asli video
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext('2d');
+
+  // Mirror biar selfie tetap natural
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+
+  // Gambar video tanpa ubah rasio
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const imageSrc = canvas.toDataURL('image/png');
+  const updated = [...photos];
+  updated[currentPose - 1] = imageSrc;
+  setPhotos(updated);
+  setStep('preview');
+};
+
+
 
   // Capture khusus untuk retake dari halaman final
   const captureRetake = () => {
-    if (!videoRef.current) {
-      alert('Gagal ambil ulang');
-      return;
-    }
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext('2d');
-    
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
-    const imageSrc = canvas.toDataURL('image/png');
-    
-    const updated = [...photos];
-    updated[retakeIndex] = imageSrc;
-    setPhotos(updated);
-    setRetakeIndex(null);
-    setStep('final');
-  };
+  const video = videoRef.current;
+  if (!video || video.videoWidth === 0) {
+    alert("Kamera belum siap 😭");
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const imageSrc = canvas.toDataURL('image/png');
+  const updated = [...photos];
+  updated[retakeIndex] = imageSrc;
+  setPhotos(updated);
+  setRetakeIndex(null);
+  setStep('final');
+};
+
 
   const nextPose = () => {
     if (currentPose < 4) {
@@ -162,14 +169,29 @@ const downloadInstagram = async () => {
     const y = i * slotHeight;
 
     // Draw cover function: paksa gambar penuh slot
-    const drawCover = (img, x, y, w, h) => {
-      const scale = Math.max(w / img.width, h / img.height); // paksa cover
-      const sw = w / scale;
-      const sh = h / scale;
-      const sx = (img.width - sw) / 2;
-      const sy = (img.height - sh) / 2;
-      ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
-    };
+const drawCover = (img, x, y, w, h) => {
+  const imgRatio = img.width / img.height;
+  const boxRatio = w / h;
+
+  let drawWidth, drawHeight, offsetX, offsetY;
+
+  if (imgRatio > boxRatio) {
+    // gambar lebih lebar -> crop kanan kiri
+    drawHeight = h;
+    drawWidth = h * imgRatio;
+    offsetX = (w - drawWidth) / 2;
+    offsetY = 0;
+  } else {
+    // gambar lebih tinggi -> crop atas bawah
+    drawWidth = w;
+    drawHeight = w / imgRatio;
+    offsetX = 0;
+    offsetY = (h - drawHeight) / 2;
+  }
+
+  ctx.drawImage(img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+};
+
 
     // kiri user
     drawCover(userImg, 0, y, halfWidth, slotHeight);
