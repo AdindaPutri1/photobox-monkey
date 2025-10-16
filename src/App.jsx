@@ -476,7 +476,7 @@ const downloadPhotobox = async () => {
               <img
                 src={monkeyPoses[currentPose - 1]}
                 alt="Monkey pose"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover"
               />
             </div>
           </div>
