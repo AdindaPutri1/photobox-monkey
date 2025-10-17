@@ -8,6 +8,8 @@ export default function PhotoboxTwinsFast() {
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [filter, setFilter] = useState('none'); 
   const [retakeIndex, setRetakeIndex] = useState(null);
+  const [countdown, setCountdown] = useState(null);
+
 
   const webcamRef = useRef(null);
   const audioRef = useRef(null);
@@ -69,31 +71,41 @@ useEffect(() => {
 
   // Ambil foto
 const capturePhoto = () => {
-  const video = videoRef.current;
-  if (!video || video.videoWidth === 0) {
+  if (!videoRef.current || videoRef.current.videoWidth === 0) {
     alert("Kamera belum siap 😭");
     return;
   }
 
-  const canvas = document.createElement('canvas');
-  // Gunakan ukuran asli video
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  // Mulai countdown 3 detik
+  let count = 3;
+  setCountdown(count);
 
-  const ctx = canvas.getContext('2d');
+  const timer = setInterval(() => {
+    count -= 1;
+    if (count > 0) {
+      setCountdown(count);
+    } else {
+      clearInterval(timer);
+      setCountdown(null);
 
-  // Mirror biar selfie tetap natural
-  ctx.translate(canvas.width, 0);
-  ctx.scale(-1, 1);
+      // Ambil foto setelah countdown selesai
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-  // Gambar video tanpa ubah rasio
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const imageSrc = canvas.toDataURL('image/png');
-  const updated = [...photos];
-  updated[currentPose - 1] = imageSrc;
-  setPhotos(updated);
-  setStep('preview');
+      const imageSrc = canvas.toDataURL('image/png');
+      const updated = [...photos];
+      updated[currentPose - 1] = imageSrc;
+      setPhotos(updated);
+      setStep('preview');
+    }
+  }, 1000);
 };
 
 
@@ -146,13 +158,39 @@ const downloadInstagram = async () => {
   const finalCanvas = document.createElement('canvas');
   const ctx = finalCanvas.getContext('2d');
 
-  // Instagram Story: 1080x1920 px
   finalCanvas.width = 1080;
   finalCanvas.height = 1920;
 
-  const halfWidth = finalCanvas.width / 2; // kiri user, kanan monkey
-  const slotHeight = finalCanvas.height / 4; // 4 foto vertikal
+  const cols = 2; // user kiri, monyet kanan
+  const rows = 4;
+  const cellW = finalCanvas.width / cols; // 540
+  const cellH = finalCanvas.height / rows; // 480
 
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+  // ✅ drawCoverImage versi baru di atas
+  const drawCoverImage = (ctx, img, x, y, w, h) => {
+    const imgRatio = img.width / img.height;
+    const boxRatio = w / h;
+    let sx, sy, sWidth, sHeight;
+
+    if (imgRatio > boxRatio) {
+      sHeight = img.height;
+      sWidth = img.height * boxRatio;
+      sx = (img.width - sWidth) / 2;
+      sy = 0;
+    } else {
+      sWidth = img.width;
+      sHeight = img.width / boxRatio;
+      sx = 0;
+      sy = (img.height - sHeight) / 2;
+    }
+
+    ctx.drawImage(img, sx, sy, sWidth, sHeight, x, y, w, h);
+  };
+
+  // ✅ Looping semua baris 4x
   for (let i = 0; i < 4; i++) {
     if (!photos[i]) continue;
 
@@ -166,37 +204,13 @@ const downloadInstagram = async () => {
       new Promise((res) => (monkeyImg.onload = res)),
     ]);
 
-    const y = i * slotHeight;
+    const y = i * cellH;
+    const xUser = 0;
+    const xMonkey = cellW;
 
-    // Draw cover function: paksa gambar penuh slot
-const drawCover = (img, x, y, w, h) => {
-  const imgRatio = img.width / img.height;
-  const boxRatio = w / h;
-
-  let drawWidth, drawHeight, offsetX, offsetY;
-
-  if (imgRatio > boxRatio) {
-    // gambar lebih lebar -> crop kanan kiri
-    drawHeight = h;
-    drawWidth = h * imgRatio;
-    offsetX = (w - drawWidth) / 2;
-    offsetY = 0;
-  } else {
-    // gambar lebih tinggi -> crop atas bawah
-    drawWidth = w;
-    drawHeight = w / imgRatio;
-    offsetX = 0;
-    offsetY = (h - drawHeight) / 2;
-  }
-
-  ctx.drawImage(img, x + offsetX, y + offsetY, drawWidth, drawHeight);
-};
-
-
-    // kiri user
-    drawCover(userImg, 0, y, halfWidth, slotHeight);
-    // kanan monkey
-    drawCover(monkeyImg, halfWidth, y, halfWidth, slotHeight);
+    // ✅ gambar kiri & kanan dengan cover
+    drawCoverImage(ctx, userImg, xUser, y, cellW, cellH);
+    drawCoverImage(ctx, monkeyImg, xMonkey, y, cellW, cellH);
   }
 
   finalCanvas.toBlob((blob) => {
@@ -208,11 +222,8 @@ const drawCover = (img, x, y, w, h) => {
   });
 };
 
-
-
-
-
 // Download untuk Photobox (dengan separator, format 4R)
+// Download untuk Photobox (format 4R)
 const downloadPhotobox = async () => {
   const finalCanvas = document.createElement('canvas');
   const ctx = finalCanvas.getContext('2d');
@@ -221,7 +232,6 @@ const downloadPhotobox = async () => {
   const photoH = 405;
   const gapX = 50;
   const gapY = 50;
-  const marginTop = 80;
   const bottomMargin = 90;
 
   finalCanvas.width = 2 * photoW + 3 * gapX;
@@ -230,6 +240,28 @@ const downloadPhotobox = async () => {
   ctx.fillStyle = '#FAFAF8';
   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
 
+  // fungsi bantu crop gambar biar pas
+  const drawCoverImage = (ctx, img, x, y, w, h) => {
+    const imgRatio = img.width / img.height;
+    const boxRatio = w / h;
+    let sx, sy, sWidth, sHeight;
+
+    if (imgRatio > boxRatio) {
+      sHeight = img.height;
+      sWidth = img.height * boxRatio;
+      sx = (img.width - sWidth) / 2;
+      sy = 0;
+    } else {
+      sWidth = img.width;
+      sHeight = img.width / boxRatio;
+      sx = 0;
+      sy = (img.height - sHeight) / 2;
+    }
+
+    ctx.drawImage(img, sx, sy, sWidth, sHeight, x, y, w, h);
+  };
+
+  // loop semua pose (4 foto)
   for (let i = 0; i < photos.length; i++) {
     if (!photos[i]) continue;
 
@@ -247,43 +279,31 @@ const downloadPhotobox = async () => {
     const x1 = gapX;
     const x2 = x1 + photoW + gapX;
 
-    // USER
-    const userScale = Math.max(photoW / userImg.width, photoH / userImg.height);
-    const userScaledW = userImg.width * userScale;
-    const userScaledH = userImg.height * userScale;
-    const userOffsetX = (photoW - userScaledW) / 2;
-    const userOffsetY = (photoH - userScaledH) / 2;
+    // gambar kiri (user)
+    drawCoverImage(ctx, userImg, x1, y, photoW, photoH);
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x1, y, photoW, photoH);
-    ctx.clip();
-    ctx.drawImage(userImg, x1 + userOffsetX, y + userOffsetY, userScaledW, userScaledH);
-    ctx.restore();
-
-    // MONKEY dengan crop bawah 10%
-    const monkeyScale = Math.max(photoW / monkeyImg.width, photoH / monkeyImg.height);
-    const monkeyScaledW = monkeyImg.width * monkeyScale;
-    const monkeyScaledH = monkeyImg.height * monkeyScale;
-    const monkeyOffsetX = (photoW - monkeyScaledW) / 2;
-    const monkeyOffsetY = (photoH - monkeyScaledH * 0.9) / 2; // 0.9 crop 10% bawah
-    const monkeyCropH = monkeyImg.height * 0.9;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x2, y, photoW, photoH);
-    ctx.clip();
-    ctx.drawImage(monkeyImg, 0, 0, monkeyImg.width, monkeyCropH, x2 + monkeyOffsetX, y + monkeyOffsetY, monkeyScaledW, monkeyScaledH * 0.9);
-    ctx.restore();
+    // gambar kanan (monyet) – crop 10% bagian bawah
+    const cropH = monkeyImg.height * 0.9;
+    ctx.drawImage(
+      monkeyImg,
+      0,
+      0,
+      monkeyImg.width,
+      cropH,
+      x2,
+      y,
+      photoW,
+      photoH
+    );
   }
 
-  // Teks bawah
+  // teks bawah
   ctx.fillStyle = '#333';
   ctx.font = 'italic 42px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Made with ❤️ by Dinda', finalCanvas.width / 2, finalCanvas.height - 60);
+  ctx.fillText('Made with ❤️ by Dinda', finalCanvas.width / 2, finalCanvas.height - 40);
 
-  // Download
+  // download
   finalCanvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -292,9 +312,6 @@ const downloadPhotobox = async () => {
     a.click();
   });
 };
-
-
-
   // Print langsung format 4R
   const printResult = async () => {
     const printCanvas = document.createElement('canvas');
@@ -405,7 +422,7 @@ const downloadPhotobox = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-green-50 to-pink-50 p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-green-50 to-pink-50 p-4 md:p-6 flex flex-col items-center w-full overflow-x-hidden">
       <audio ref={audioRef} loop>
         <source src="/You Da One.mp3" type="audio/mpeg" />
       </audio>
@@ -471,36 +488,50 @@ const downloadPhotobox = async () => {
             ))}
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
-              {webcamReady && (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="rounded-2xl w-full h-full object-cover"
-                  style={{ filter: getFilterStyle(filter), transform: 'scaleX(-1)' }}
-                />
-              )}
-              {!webcamReady && <p className="text-white font-bold">Kamera sedang menyiapkan...</p>}
-
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                <button
-                  onClick={capturePhoto}
-                  className="bg-pink-500 hover:bg-pink-600 text-white p-4 rounded-full shadow-lg"
-                >
-                  <Camera size={32} />
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-200 to-green-100 rounded-2xl flex items-center justify-center aspect-[4/3] overflow-hidden">
-              <img
-                src={monkeyPoses[currentPose - 1]}
-                alt="Monkey pose"
-                className="w-full h-full object-cover"
+          <div className="flex flex-col md:flex-row justify-center items-stretch gap-6">
+          {/* Kamera */}
+          <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[4/3] w-full md:w-1/2 flex items-center justify-center">
+            {webcamReady ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover rounded-2xl"
+                style={{ filter: getFilterStyle(filter), transform: 'scaleX(-1)' }}
               />
-            </div>
+            ) : (
+              <p className="text-white font-bold text-center">Kamera sedang menyiapkan...</p>
+            )}
+
+            {countdown !== null && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-white text-[8rem] font-extrabold drop-shadow-lg animate-pulse">
+                  {countdown}
+                </span>
+              </div>
+            )}
+          </div>
+
+
+          {/* Gambar Monyet */}
+          <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-[4/3] w-full md:w-1/2 flex items-center justify-center">
+            <img
+              src={monkeyPoses[currentPose - 1]}
+              alt="Monkey pose"
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* 🔘 Tombol Kamera baru */}
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={capturePhoto}
+              className="bg-gradient-to-r from-green-400 to-pink-400 hover:shadow-lg text-white px-12 py-4 rounded-full text-xl font-bold flex items-center gap-3 transition-transform hover:scale-105"
+            >
+              <Camera size={28} />
+              Ambil Foto
+            </button>
           </div>
         </div>
       )}
@@ -511,7 +542,7 @@ const downloadPhotobox = async () => {
             Ulangi Pose {retakeIndex + 1}
           </h2>
 
-          <div className="grid grid-cols-2 gap-4 items-center justify-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gradient-to-r from-green-50 to-pink-50 p-4 rounded-2xl">
             <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-[4/3] flex items-center justify-center">
               <video
                 ref={videoRef}
@@ -526,7 +557,7 @@ const downloadPhotobox = async () => {
               <img
                 src={monkeyPoses[retakeIndex]}
                 alt="Monkey Pose"
-                className="w-full h-full object-cover rounded-2xl"
+                className="w-full h-full object-contain"
               />
             </div>
           </div>
@@ -657,8 +688,25 @@ const downloadPhotobox = async () => {
       </div>
 
       <style jsx>{`
-        @media print {
-          @page { size: 4in 6in; margin: 0; }
+        video, img {
+          object-fit: cover;
+        }
+
+        /* biar sejajar di semua device */
+        @media (max-width: 768px) {
+          .aspect-[4/3] {
+            aspect-ratio: auto;
+            height: auto;
+          }
+        }
+
+        @media (min-width: 768px) {
+          .aspect-[4/3] {
+            height: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
         }
       `}</style>
     </div>

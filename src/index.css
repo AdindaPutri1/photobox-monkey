@@ -17,6 +17,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* --- GLOBAL ELEMENTS --- */
 button {
   transition: all 0.25s ease-in-out;
   cursor: pointer;
@@ -29,11 +30,13 @@ button:active {
 video {
   border-radius: 1rem;
   display: block;
+  object-fit: cover;
 }
 
 img {
   user-select: none;
   -webkit-user-drag: none;
+  object-fit: cover;
 }
 
 /* Smooth scrolling */
@@ -45,16 +48,13 @@ html {
 ::-webkit-scrollbar {
   width: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #ec4899;
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #db2777;
 }
@@ -70,27 +70,85 @@ html {
     transform: translateY(0);
   }
 }
-
-/* Apply fade in to containers */
 .max-w-2xl,
 .max-w-4xl {
   animation: fadeIn 0.4s ease-out;
 }
 
-/* Print styles */
+/* --- RESPONSIVE ADJUSTMENTS --- */
+@media (max-width: 1024px) {
+  .max-w-4xl {
+    padding: 1.5rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Layout switch ke 1 kolom */
+  .grid.md\\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Ukuran video & foto disesuaikan */
+
+  video,
+  img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+  /* Teks dikecilin */
+  .text-5xl {
+    font-size: 2rem !important;
+  }
+  .text-4xl {
+    font-size: 1.75rem !important;
+  }
+  .text-3xl {
+    font-size: 1.5rem !important;
+  }
+
+  /* Tombol biar mudah di-tap */
+  button {
+    width: 100%;
+    justify-content: center;
+    font-size: 1rem;
+    padding: 0.75rem;
+  }
+
+  .p-8 {
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .text-5xl {
+    font-size: 1.5rem !important;
+  }
+
+  .text-3xl {
+    font-size: 1.25rem !important;
+  }
+}
+
+/* --- PRINT STYLES (4R) --- */
 @media print {
   @page {
     size: 4in 6in;
     margin: 0;
   }
-  
+
   body {
     margin: 0;
     padding: 0;
   }
 }
 
-/* Loading spinner (optional) */
+/* --- SPINNER --- */
 .spinner {
   border: 3px solid #f3f3f3;
   border-top: 3px solid #ec4899;
@@ -101,21 +159,22 @@ html {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-/* Hover effects enhancement */
+/* Hover & focus enhancements */
 button:hover {
   filter: brightness(1.05);
 }
-
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-/* Focus visible for accessibility */
 button:focus-visible {
   outline: 2px solid #ec4899;
   outline-offset: 2px;
